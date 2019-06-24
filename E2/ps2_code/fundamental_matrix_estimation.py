@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.misc import imread
+#from scipy.misc import imread
+from scipy.misc.pilutil import imread
 import matplotlib.pyplot as plt
 import scipy.io as sio
 from epipolar_utils import *
@@ -32,10 +33,12 @@ def lls_eight_point_alg(points1, points2):
 
     U, S, V_T = np.linalg.svd(F, full_matrices=True)
     S = np.diag(S)
+    #enforce property that essential matrix has only 2 non-zero eigenvalues
     S[-1, :] = 0.0
-    F_ = np.dot(U, V_T)
+    F_ = np.dot(U, np.dot(S, V_T))
 
     return F_
+
     
 '''
 NORMALIZED_EIGHT_POINT_ALG  computes the fundamental matrix from matching points
@@ -50,20 +53,48 @@ Returns:
 Please see lecture notes and slides to see how the normalized eight
 point algorithm works
 '''
+
 def normalized_eight_point_alg(points1, points2):
     # TODO: Implement this method!
     #raise Exception('Not Implemented Error')
-    N = len(points1)
-
-    mean_p1 = np.mean(points1[:, 0:2], axis=0)
-    mean_p2 = np.mean(points2[:, 0:2], axis=0)
-
-    points1_centered = points1[:, 0:2] - mean_p1
-    points2_centered = points2[:, 0:2] - mean_p2
     
-    print(mean_p1, mean_p2)
-    stop
-    pass
+    points1_ = points1[:, 0:2]
+    points2_ = points2[:, 0:2]
+
+    #Find centroid
+    centroid_p1 = np.average(points1_, axis=0)
+    centroid_p2 = np.average(points2_, axis=0)
+
+    #Center points
+    points1_centered = points1_ - centroid_p1
+    points2_centered = points2_ - centroid_p2
+    #Compute distance to center 
+    points1_distance = np.sqrt(np.sum(points1_centered**2, axis=1))
+    points2_distance = np.sqrt(np.sum(points2_centered**2, axis=1))
+    mean1_dist_origin = np.mean(points1_distance)
+    mean2_dist_origin = np.mean(points2_distance)
+    #scaling factor should be 2/mean_distance to center
+    s1 = 2/mean1_dist_origin
+    s2 = 2/mean2_dist_origin
+    
+    T = np.array([[s1, 0, -s1*centroid_p1[0]], 
+                   [0, s1, -s1*centroid_p1[1]], 
+                   [0, 0, 1]])
+    
+    T_ = np.array([[s2, 0, -s2*centroid_p2[0]], 
+                   [0, s2, -s2*centroid_p2[1]], 
+                   [0, 0, 1]])
+
+    #Apply transform
+    q1 = np.transpose(np.dot(T, points1.T))
+    q2 = np.transpose(np.dot(T_, points2.T))
+
+    F_q = lls_eight_point_alg(q1, q2)
+
+    #Undo normalization
+    F = np.dot(np.dot(T_.T, F_q), T)
+    
+    return F
 
 '''
 PLOT_EPIPOLAR_LINES_ON_IMAGES given a pair of images and corresponding points,
@@ -84,7 +115,28 @@ Returns:
 def plot_epipolar_lines_on_images(points1, points2, im1, im2, F):
     # TODO: Implement this method!
     #raise Exception('Not Implemented Error')
-    pass
+    plt.subplot(1,2,1)
+    h, w = im1.shape
+    ep_lines = np.dot(F.T, points2.T).T
+
+    for k, ln1 in enumerate(ep_lines):
+        a, b, c = ln1
+        m = -(a*1.0/b)
+        y_inter = -(c*1.0/b)
+        plt.plot([0, w], [y_inter, m*h + y_inter], 'r')
+        plt.plot(points1[k][0], points1[k][1], 'b*')
+    plt.imshow(im1, cmap='gray')
+    
+    plt.subplot(1,2,2)
+    h, w = im2.shape
+    ep_lines = np.dot(F, points1.T).T
+    for k, ln2 in enumerate(ep_lines):
+        a, b, c = ln2
+        m = -(a*1.0/b)
+        y_inter = -(c*1.0/b)
+        plt.plot([0, w], [y_inter, m*h + y_inter], 'r')
+        plt.plot(points2[k][0], points2[k][1], 'b*')
+    plt.imshow(im2, cmap='gray')
 
 '''
 COMPUTE_DISTANCE_TO_EPIPOLAR_LINES  computes the average distance of a set a 
@@ -101,7 +153,22 @@ Returns:
 def compute_distance_to_epipolar_lines(points1, points2, F):
     # TODO: Implement this method!
     #raise Exception('Not Implemented Error')
-    pass
+    #lines of points1
+    ep_lines = np.dot(F.T, points2.T).T
+    error = []
+
+    for k, ln1 in enumerate(ep_lines):
+        a, b, c = ln1
+        x, y, _ = points1[k]
+        error.append([abs(a*x + b*y + 1.0*c)])
+
+    ep_lines = np.dot(F, points1.T).T
+    for k, ln2 in enumerate(ep_lines):
+        a, b, c = ln2
+        x, y, _ = points2[k]
+        error.append([abs(a*x + b*y + 1.0*c)])
+
+    return np.array(error).mean()
 
 if __name__ == '__main__':
     for im_set in ['data/set1', 'data/set2']:
