@@ -19,7 +19,31 @@ Returns:
 '''
 def factorization_method(points_im1, points_im2):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    points_1 = points_im1[:, 0:2]
+    points_2 = points_im2[:, 0:2]
+    #Find centroids
+    centroid_p1 = np.average(points_1, axis=0)
+    centroid_p2 = np.average(points_2, axis=0)
+
+    #Center points
+    center_p1 = points_1 - centroid_p1
+    center_p2 = points_2 - centroid_p2
+
+    #Create D
+    D = np.zeros((4, len(points_1)))
+    D[0:2] = center_p1.T
+    D[2:4] = center_p2.T
+
+    #SVD
+    U, S, V_T = np.linalg.svd(D, full_matrices=True)
+    #Take best rank 3 approx
+    M = U[:,0:3]
+    S = np.diag(S)
+    W3 = S[0:3, 0:3]
+    V3_T = V_T[0:3, :]
+    S = np.dot(W3, V3_T)
+    
+    return S, M
 
 if __name__ == '__main__':
     for im_set in ['data/set1', 'data/set1_subset']:
