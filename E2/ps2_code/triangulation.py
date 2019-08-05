@@ -20,8 +20,29 @@ Returns:
 '''
 def estimate_initial_RT(E):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    W = np.array([[0, -1, 0],
+                  [1, 0, 0],
+                  [0, 0, 1]])
 
+    U, D, V_T = np.linalg.svd(E, full_matrices=True)
+    Q1 = np.dot(U, np.dot(W, V_T))
+    Q2 = np.dot(U, np.dot(W.T, V_T))
+    R1 = np.dot(np.linalg.det(Q1), Q1)
+    R2 = np.dot(np.linalg.det(Q2), Q2)
+    #third colum U
+    T1 = U[:, 2]
+    T2 = -U[:, 2]
+
+    RT = np.zeros((4, 3, 4))
+    RT1 = np.hstack((R1, T1.reshape(3,1)))
+    RT[0,:,:] = RT1
+    RT2 = np.hstack((R1,T2.reshape(3,1)))
+    RT[1,:,:] = RT2
+    RT3 = np.hstack((R2,T1.reshape(3,1)))
+    RT[2,:,:] = RT3
+    RT4 = np.hstack((R2,T2.reshape(3,1)))
+    RT[3,:,:] = RT4
+    return RT
 '''
 LINEAR_ESTIMATE_3D_POINT given a corresponding points in different images,
 compute the 3D point is the best linear estimate
@@ -33,7 +54,22 @@ Returns:
 '''
 def linear_estimate_3d_point(image_points, camera_matrices):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    A = np.zeros((len(camera_matrices)*len(image_points), 4))
+    
+    for k, point in enumerate(image_points):
+        M = camera_matrices[k]
+        m1 = M[0, :]
+        m2 = M[1, :]
+        m3 = M[2, :]
+        x = point[0]
+        y = point[1]
+        A[2*k] = np.array([x*m3-m1])
+        A[2*k+1] = np.array([y*m3-m2])
+    U, S, V_T = np.linalg.svd(A, full_matrices=True)
+    #Take last row of V_T homogeniues
+    P = V_T[-1]
+    P /= P[-1]
+    return P[0:3]
 
 '''
 REPROJECTION_ERROR given a 3D point and its corresponding points in the image
@@ -47,7 +83,16 @@ Returns:
 '''
 def reprojection_error(point_3d, image_points, camera_matrices):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    error = np.zeros((2*len(camera_matrices), 1))
+    point_3d = np.concatenate((point_3d,np.array([1])),axis=0)
+    for k, point in enumerate(image_points):
+        M = camera_matrices[k]
+        p_ = np.dot(M, point_3d)
+        p_ /= p_[2]
+        print(p_[0:2], image_points[k], error[2*k:2*k+2])
+        error[2*k:2*k+2, :] = (p_[0:2] - image_points[k]).reshape((2,1))
+
+    return error
 
 '''
 JACOBIAN given a 3D point and its corresponding points in the image
@@ -101,15 +146,15 @@ if __name__ == '__main__':
         sorted(os.listdir('data/statue/images')) if '.jpg' in x]
     focal_length = 719.5459
     matches_subset = np.load(os.path.join(image_data_dir,
-        'matches_subset.npy'))[0,:]
-    dense_matches = np.load(os.path.join(image_data_dir, 'dense_matches.npy'))
+        'matches_subset.npy'), encoding='latin1')[0,:]
+    dense_matches = np.load(os.path.join(image_data_dir, 'dense_matches.npy'), encoding='latin1')
     fundamental_matrices = np.load(os.path.join(image_data_dir,
-        'fundamental_matrices.npy'))[0,:]
+        'fundamental_matrices.npy'), encoding='latin1')[0,:]
 
     # Part A: Computing the 4 initial R,T transformations from Essential Matrix
-    print '-' * 80
-    print "Part A: Check your matrices against the example R,T"
-    print '-' * 80
+    print('-' * 80)
+    print("Part A: Check your matrices against the example R,T")
+    print('-' * 80)
     K = np.eye(3)
     K[0,0] = K[1,1] = focal_length
     E = K.T.dot(fundamental_matrices[0]).dot(K)
@@ -118,16 +163,16 @@ if __name__ == '__main__':
     example_RT = np.array([[0.9736, -0.0988, -0.2056, 0.9994],
         [0.1019, 0.9948, 0.0045, -0.0089],
         [0.2041, -0.0254, 0.9786, 0.0331]])
-    print "Example RT:\n", example_RT
+    print("Example RT:\n", example_RT)
     estimated_RT = estimate_initial_RT(E)
-    print
-    print "Estimated RT:\n", estimated_RT
+    print()
+    print("Estimated RT:\n", estimated_RT)
 
     # Part B: Determining the best linear estimate of a 3D point
-    print '-' * 80
-    print 'Part B: Check that the difference from expected point '
-    print 'is near zero'
-    print '-' * 80
+    print('-' * 80)
+    print('Part B: Check that the difference from expected point ')
+    print('is near zero')
+    print('-' * 80)
     camera_matrices = np.zeros((2, 3, 4))
     camera_matrices[0, :, :] = K.dot(np.hstack((np.eye(3), np.zeros((3,1)))))
     camera_matrices[1, :, :] = K.dot(example_RT)
@@ -135,30 +180,30 @@ if __name__ == '__main__':
     estimated_3d_point = linear_estimate_3d_point(unit_test_matches.copy(),
         camera_matrices.copy())
     expected_3d_point = np.array([0.6774, -1.1029, 4.6621])
-    print "Difference: ", np.fabs(estimated_3d_point - expected_3d_point).sum()
+    print("Difference: ", np.fabs(estimated_3d_point - expected_3d_point).sum())
 
     # Part C: Calculating the reprojection error and its Jacobian
-    print '-' * 80
-    print 'Part C: Check that the difference from expected error/Jacobian '
-    print 'is near zero'
-    print '-' * 80
+    print('-' * 80)
+    print('Part C: Check that the difference from expected error/Jacobian ')
+    print('is near zero')
+    print('-' * 80)
     estimated_error = reprojection_error(
             expected_3d_point, unit_test_matches, camera_matrices)
     estimated_jacobian = jacobian(expected_3d_point, camera_matrices)
     expected_error = np.array((-0.0095458, -0.5171407,  0.0059307,  0.501631))
-    print "Error Difference: ", np.fabs(estimated_error - expected_error).sum()
+    print("Error Difference: ", np.fabs(estimated_error - expected_error).sum())
     expected_jacobian = np.array([[ 154.33943931, 0., -22.42541691],
          [0., 154.33943931, 36.51165089],
          [141.87950588, -14.27738422, -56.20341644],
          [21.9792766, 149.50628901, 32.23425643]])
-    print "Jacobian Difference: ", np.fabs(estimated_jacobian
-        - expected_jacobian).sum()
+    print("Jacobian Difference: ", np.fabs(estimated_jacobian
+        - expected_jacobian).sum())
 
     # Part D: Determining the best nonlinear estimate of a 3D point
-    print '-' * 80
-    print 'Part D: Check that the reprojection error from nonlinear method'
-    print 'is lower than linear method'
-    print '-' * 80
+    print('-' * 80)
+    print('Part D: Check that the reprojection error from nonlinear method')
+    print('is lower than linear method')
+    print('-' * 80)
     estimated_3d_point_linear = linear_estimate_3d_point(
         unit_test_image_matches.copy(), unit_test_camera_matrix.copy())
     estimated_3d_point_nonlinear = nonlinear_estimate_3d_point(
@@ -166,28 +211,28 @@ if __name__ == '__main__':
     error_linear = reprojection_error(
         estimated_3d_point_linear, unit_test_image_matches,
         unit_test_camera_matrix)
-    print "Linear method error:", np.linalg.norm(error_linear)
+    print("Linear method error:", np.linalg.norm(error_linear))
     error_nonlinear = reprojection_error(
         estimated_3d_point_nonlinear, unit_test_image_matches,
         unit_test_camera_matrix)
-    print "Nonlinear method error:", np.linalg.norm(error_nonlinear)
+    print("Nonlinear method error:", np.linalg.norm(error_nonlinear))
 
     # Part E: Determining the correct R, T from Essential Matrix
-    print '-' * 80
-    print "Part E: Check your matrix against the example R,T"
-    print '-' * 80
+    print('-' * 80)
+    print("Part E: Check your matrix against the example R,T")
+    print('-' * 80)
     estimated_RT = estimate_RT_from_E(E,
         np.expand_dims(unit_test_image_matches[:2,:], axis=0), K)
-    print "Example RT:\n", example_RT
-    print
-    print "Estimated RT:\n", estimated_RT
+    print("Example RT:\n", example_RT)
+    print()
+    print("Estimated RT:\n", estimated_RT)
 
     # Part F: Run the entire Structure from Motion pipeline
     if not run_pipeline:
         sys.exit()
-    print '-' * 80
-    print 'Part F: Run the entire SFM pipeline'
-    print '-' * 80
+    print('-' * 80)
+    print('Part F: Run the entire SFM pipeline')
+    print('-' * 80)
     frames = [0] * (len(image_paths) - 1)
     for i in xrange(len(image_paths)-1):
         frames[i] = Frame(matches_subset[i].T, focal_length,
