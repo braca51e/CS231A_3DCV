@@ -89,7 +89,6 @@ def reprojection_error(point_3d, image_points, camera_matrices):
         M = camera_matrices[k]
         p_ = np.dot(M, point_3d)
         p_ /= p_[2]
-        print(p_[0:2], image_points[k], error[2*k:2*k+2])
         error[2*k:2*k+2, :] = (p_[0:2] - image_points[k]).reshape((2,1))
 
     return error
@@ -105,7 +104,21 @@ Returns:
 '''
 def jacobian(point_3d, camera_matrices):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    J = np.zeros((2*len(camera_matrices), 3))
+    point_3d = np.hstack((point_3d, 1))
+    #Apply quatient rule pi = [m0P/m2P m1P/m2P].T
+    for k, M in enumerate(camera_matrices):
+        pi = M.dot(point_3d)
+        #compute for x
+        J[2*k, 0] = (pi[2]*M[0,0] - pi[0]*M[2,0])/pi[2]**2
+        J[2*k, 1] = (pi[2]*M[0,1] - pi[0]*M[2,1])/pi[2]**2
+        J[2*k, 2] = (pi[2]*M[0,2] - pi[0]*M[2,2])/pi[2]**2
+        #compute for y
+        J[2*k+1, 0] = (pi[2]*M[1,0] - pi[1]*M[2,0])/pi[2]**2
+        J[2*k+1, 1] = (pi[2]*M[1,1] - pi[1]*M[2,1])/pi[2]**2
+        J[2*k+1, 2] = (pi[2]*M[1,2] - pi[1]*M[2,2])/pi[2]**2
+
+    return J
 
 '''
 NONLINEAR_ESTIMATE_3D_POINT given a corresponding points in different images,
@@ -118,7 +131,15 @@ Returns:
 '''
 def nonlinear_estimate_3d_point(image_points, camera_matrices):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    #part a good stimate
+    P_ = linear_estimate_3d_point(image_points, camera_matrices)
+    #part b 10 iterations
+    for i in range(10):
+        J = jacobian(P_, camera_matrices)
+        e = reprojection_error(P_, image_points, camera_matrices)
+        P_ = P_ - np.dot(np.linalg.inv(np.dot(J.T, J)), np.dot(J.T, e))[0]
+
+    return P_
 
 '''
 ESTIMATE_RT_FROM_E from the Essential Matrix, we can compute  the relative RT 
@@ -133,7 +154,38 @@ Returns:
 '''
 def estimate_RT_from_E(E, image_points, K):
     # TODO: Implement this method!
-    raise Exception('Not Implemented Error')
+    #Assuming conical cameras K = K' M = [I 0] M'=[R T]
+    N_points, M_cameras, _ = image_points.shape
+    camera_matrices = np.zeros((M_cameras, 3, 4))
+    M1 = np.hstack((K, [[0],[0],[0]]))
+    camera_matrices[0] = M1
+    RT_S = estimate_initial_RT(E)
+
+    counts = dict()
+
+    for index, RT in enumerate(RT_S):
+        M2 = np.dot(K, RT)
+        camera_matrices[1] = M2
+        for image_point in image_points:
+            #P in frame of first cam
+            P = nonlinear_estimate_3d_point(image_point, camera_matrices)
+            #Transform P to second camera homegeneus coordinates
+            P_C2 = np.hstack((P,[1.0]))
+            #Apply Transformation
+            P_C2 = np.dot(RT, P_C2)
+            #Make homogeneus
+            P_C2 /= P_C2[-1]
+            P_C2 = P_C2[:3]
+
+            if P[2] > 0 and P_C2[2] > 0:
+                if index not in counts:
+                    counts[index] = 1
+                else:
+                    counts[index] += 1
+
+    index = sorted(counts.items(), key=lambda x: x[1])[-1][0]
+
+    return RT_S[index]
 
 if __name__ == '__main__':
     run_pipeline = True
@@ -234,7 +286,7 @@ if __name__ == '__main__':
     print('Part F: Run the entire SFM pipeline')
     print('-' * 80)
     frames = [0] * (len(image_paths) - 1)
-    for i in xrange(len(image_paths)-1):
+    for i in range(len(image_paths)-1):
         frames[i] = Frame(matches_subset[i].T, focal_length,
                 fundamental_matrices[i], im_width, im_height)
         bundle_adjustment(frames[i])
@@ -243,7 +295,7 @@ if __name__ == '__main__':
     # Construct the dense matching
     camera_matrices = np.zeros((2,3,4))
     dense_structure = np.zeros((0,3))
-    for i in xrange(len(frames)-1):
+    for i in range(len(frames)-1):
         matches = dense_matches[i]
         camera_matrices[0,:,:] = merged_frame.K.dot(
             merged_frame.motion[i,:,:])
@@ -251,7 +303,7 @@ if __name__ == '__main__':
                 merged_frame.motion[i+1,:,:])
         points_3d = np.zeros((matches.shape[1], 3))
         use_point = np.array([True]*matches.shape[1])
-        for j in xrange(matches.shape[1]):
+        for j in range(matches.shape[1]):
             points_3d[j,:] = nonlinear_estimate_3d_point(
                 matches[:,j].reshape((2,2)), camera_matrices)
         dense_structure = np.vstack((dense_structure, points_3d[use_point,:]))
